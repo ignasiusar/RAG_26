@@ -1,62 +1,79 @@
 import os
-import pandas as pd
 import chromadb
+import numpy as np
 from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
 
+# 1. Panggil fungsi pembersih data dari file sebelah
+from data_cleaning import get_clean_data
+
 load_dotenv()
+client_hf = InferenceClient(api_key=os.getenv("HF_TOKEN"))
 
-client_hf = InferenceClient(
-    api_key=os.getenv("HF_TOKEN"),
-)
+def process_and_store_data():
+    print("1. Menarik data bersih dari file data_cleaning.py...")
+    # Kita panggil dataframe yang sudah di-cleaning
+    df_bersih = get_clean_data('id-jobstreet-com-2026-10-05-2.csv')
 
-def process_and_store_data(csv_url: str):
-
+    print("2. Menyiapkan database ChromaDB...")
     chroma_client = chromadb.PersistentClient(path="./db_loker")
-    collection = chroma_client.get_or_create_collection(name="kumpulan_loker")
+    
+    # Kita RESET database lama agar terganti dengan 100 data scraping terbaru
+    try:
+        chroma_client.delete_collection(name="kumpulan_loker")
+    except ValueError:
+        pass
+    collection = chroma_client.create_collection(name="kumpulan_loker")
 
-    print("Mengambil data dari Google Sheets...")
-    df = pd.read_csv(csv_url)
-
-    df = df.dropna(subset=['title'])
-
-    print("Daftar kolom yang terbaca oleh sistem:", df.columns.tolist())
+    print("3. Mulai proses vektorisasi (Embedding)...")
     ids, documents, metadatas, embeddings = [], [], [], []
 
-    for index, row in df.iterrows():
-        job_id = str(row['job_id'])
+    # Looping menggunakan df_bersih (data dari JobStreet)
+    for index, row in df_bersih.iterrows():
+        job_id = f"jobstreet_{index}"
         
-        # Chunking: Menggabungkan kolom relevan
-        teks_loker = f"Posisi: {row['title']}. Perusahaan: {row['company']}. Tipe: {row['job_type']}. Lokasi: {row['location']}. Skill: {row['required_skill']}. Deskripsi: {row['description']}"
+        # Menggunakan nama kolom yang BARU (sesuai data_cleaning.py)
+        teks_loker = f"Posisi: {row['Posisi']}. Perusahaan: {row['Perusahaan']}. Tipe: {row['Tipe_Kerja']}. Lokasi: {row['Lokasi']}. Deskripsi: {row['Deskripsi_lengkap']}"
         
-        print(f"Embedding ID: {job_id} - {row['title']}...")
+        print(f"Embedding ID: {job_id} - {row['Posisi']}...")
         
-        # Proses vektorisasi
-        hasil_vektor = client_hf.feature_extraction(
-            teks_loker,
-            model="sentence-transformers/all-MiniLM-L6-v2",
-        )
-        
-        vektor_flat = hasil_vektor[0] if isinstance(hasil_vektor[0], list) else hasil_vektor
-        
-        ids.append(job_id)
-        documents.append(teks_loker)
-        embeddings.append(vektor_flat)
-        metadatas.append({
-            "title": str(row['title']),
-            "company": str(row['company']),
-            "location": str(row['location'])
-        })
+        try:
+            # PENTING: Pakai model MULTILINGUAL agar paham Bahasa Indonesia!
+            hasil_vektor = client_hf.feature_extraction(
+                teks_loker,
+                model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            )
+            
+            # Meratakan vektor agar bisa masuk ChromaDB
+            vektor_flat = np.array(hasil_vektor).flatten().tolist()
+            
+            ids.append(job_id)
+            documents.append(teks_loker)
+            embeddings.append(vektor_flat)
+            
+            # Simpan metadata untuk balasan bot nanti
+            metadatas.append({
+                "posisi": str(row['Posisi']),
+                "perusahaan": str(row['Perusahaan']),
+                "lokasi": str(row['Lokasi']),
+                "url": str(row['URL'])
+            })
+        except Exception as e:
+            print(f"Gagal embedding baris {index}: {e}")
 
-    print("Melakukan upsert ke ChromaDB...")
-    collection.upsert(
-        ids=ids,
-        documents=documents,
-        embeddings=embeddings,
-        metadatas=metadatas
-    )
-    print("Sinkronisasi data selesai dan berhasil!")
+    print("4. Melakukan upsert ke ChromaDB...")
+    if ids:
+        collection.upsert(
+            ids=ids,
+            documents=documents,
+            embeddings=embeddings,
+            metadatas=metadatas
+        )
+        print("Sinkronisasi data selesai dan berhasil! 🚀")
+        print(f"Total data di database saat ini: {collection.count()}")
+    else:
+        print("Gagal: Tidak ada data yang berhasil diproses.")
 
 if __name__ == "__main__":
-    URL_SHEET = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQovj1zaxMh_XQkBarUT549S9__qm83mYFu5whCsqjKFjObhk8e9n4Ywm9T9rYazQsuIm-BPdUlHr49/pub?gid=669667940&single=true&output=csv"
-    process_and_store_data(URL_SHEET)
+    # Tinggal panggil fungsi utamanya, tidak butuh URL Google Sheet lagi
+    process_and_store_data()
