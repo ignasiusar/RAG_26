@@ -1,7 +1,14 @@
-import { useState } from "react";
-import { BriefcaseBusiness, MoreHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+    BriefcaseBusiness,
+    MoreHorizontal,
+    RotateCcw,
+} from "lucide-react";
 import ChatInput from "./ChatInput";
 import ChatMessage, { type MessageRole } from "./ChatMessage";
+import SuggestedPrompt from "./SuggestedPrompt";
+import TypingIndicator from "./TypingIndicator";
+import { type SourceItem } from "./SourceList";
 import "../../styles/chat.css";
 
 interface Message {
@@ -9,6 +16,7 @@ interface Message {
     role: MessageRole;
     content: string;
     time: string;
+    sources?: SourceItem[];
 }
 
 const initialMessages: Message[] = [
@@ -19,45 +27,107 @@ const initialMessages: Message[] = [
             "Halo! Saya bisa membantu kamu mencari pekerjaan berdasarkan posisi, lokasi, dan kemampuan yang kamu miliki.",
         time: "15.38",
     },
+];
+
+const mockSources: SourceItem[] = [
     {
-        id: "message-2",
-        role: "user",
-        content:
-            "Saya mencari posisi Frontend Developer di Malang yang menerima fresh graduate.",
-        time: "15.39",
+        id: "source-1",
+        title: "LinkedIn Jobs",
+        description: "Sumber pencarian lowongan pekerjaan",
+        url: "https://www.linkedin.com/jobs/",
     },
     {
-        id: "message-3",
-        role: "assistant",
-        content:
-            "Baik, saya akan membantu mencari lowongan yang sesuai dengan kriteria tersebut.",
-        time: "15.39",
+        id: "source-2",
+        title: "JobStreet Indonesia",
+        description: "Sumber informasi posisi dan perusahaan",
+        url: "https://www.jobstreet.co.id/",
     },
 ];
 
+function getCurrentTime() {
+    return new Intl.DateTimeFormat("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    })
+        .format(new Date())
+        .replace(".", ":");
+}
+
 function ChatPanel() {
     const [messages, setMessages] = useState<Message[]>(initialMessages);
+    const [hasStarted, setHasStarted] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    const bottomMessageRef = useRef<HTMLDivElement>(null);
+    const responseTimeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        bottomMessageRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "end",
+        });
+    }, [messages, isTyping]);
+
+    useEffect(() => {
+        return () => {
+            if (responseTimeoutRef.current !== null) {
+                window.clearTimeout(responseTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleSendMessage = (content: string) => {
-        const currentTime = new Intl.DateTimeFormat("id-ID", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-        })
-            .format(new Date())
-            .replace(".", ":");
+        if (isTyping) {
+            return;
+        }
 
-        const newMessage: Message = {
+        const userMessage: Message = {
             id: crypto.randomUUID(),
             role: "user",
             content,
-            time: currentTime,
+            time: getCurrentTime(),
         };
 
         setMessages((currentMessages) => [
             ...currentMessages,
-            newMessage,
+            userMessage,
         ]);
+
+        setHasStarted(true);
+        setIsTyping(true);
+
+        responseTimeoutRef.current = window.setTimeout(() => {
+            const assistantMessage: Message = {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content:
+                    "Berikut contoh tampilan sumber yang nantinya akan dihasilkan dari proses pencarian RAG.",
+                time: getCurrentTime(),
+                sources: mockSources,
+            };
+
+            setMessages((currentMessages) => [
+                ...currentMessages,
+                assistantMessage,
+            ]);
+
+            setIsTyping(false);
+            responseTimeoutRef.current = null;
+        }, 1200);
+    };
+
+    const handleResetChat = () => {
+        if (responseTimeoutRef.current !== null) {
+            window.clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+        }
+
+        setMessages(initialMessages);
+        setHasStarted(false);
+        setIsTyping(false);
+        setIsMenuOpen(false);
     };
 
     return (
@@ -73,18 +143,37 @@ function ChatPanel() {
 
                         <div className="chat-panel__status">
                             <span className="status-dot" />
-                            <span>Siap membantu</span>
+                            <span>
+                                {isTyping ? "Sedang mencari..." : "Siap membantu"}
+                            </span>
                         </div>
                     </div>
                 </div>
 
-                <button
-                    className="chat-panel__menu"
-                    type="button"
-                    aria-label="Buka menu percakapan"
-                >
-                    <MoreHorizontal size={22} />
-                </button>
+                <div className="chat-panel__menu-wrapper">
+                    <button
+                        className="chat-panel__menu"
+                        type="button"
+                        aria-label="Buka menu percakapan"
+                        aria-expanded={isMenuOpen}
+                        onClick={() => setIsMenuOpen((current) => !current)}
+                    >
+                        <MoreHorizontal size={22} />
+                    </button>
+
+                    {isMenuOpen && (
+                        <div className="chat-panel__dropdown" role="menu">
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={handleResetChat}
+                            >
+                                <RotateCcw size={16} />
+                                <span>Mulai chat baru</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
             </header>
 
             <div className="chat-panel__content">
@@ -95,13 +184,25 @@ function ChatPanel() {
                             role={message.role}
                             content={message.content}
                             time={message.time}
+                            sources={message.sources}
                         />
                     ))}
+
+                    {!hasStarted && (
+                        <SuggestedPrompt onSelect={handleSendMessage} />
+                    )}
+
+                    {isTyping && <TypingIndicator />}
+
+                    <div ref={bottomMessageRef} />
                 </div>
             </div>
 
             <footer className="chat-panel__footer">
-                <ChatInput onSend={handleSendMessage} />
+                <ChatInput
+                    onSend={handleSendMessage}
+                    disabled={isTyping}
+                />
             </footer>
         </section>
     );

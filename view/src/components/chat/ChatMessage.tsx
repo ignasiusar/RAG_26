@@ -1,4 +1,5 @@
 import { BriefcaseBusiness, User } from "lucide-react";
+import SourceList, { type SourceItem } from "./SourceList";
 
 export type MessageRole = "assistant" | "user";
 
@@ -6,9 +7,15 @@ interface ChatMessageProps {
     role: MessageRole;
     content: string;
     time: string;
+    sources?: SourceItem[];
 }
 
-function ChatMessage({ role, content, time }: ChatMessageProps) {
+function ChatMessage({
+    role,
+    content,
+    time,
+    sources = [],
+}: ChatMessageProps) {
     const isUser = role === "user";
 
     return (
@@ -28,6 +35,8 @@ function ChatMessage({ role, content, time }: ChatMessageProps) {
                 <div className="chat-message__bubble">
                     <p>{content}</p>
                 </div>
+
+                {!isUser && <SourceList sources={sources} />}
 
                 <time className="chat-message__time">{time}</time>
             </div>
