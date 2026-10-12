@@ -21,22 +21,17 @@ def retrieve_relevant_jobs(pertanyaan_user, jumlah_hasil=3):
     )
     
     # 5. Tampilkan hasilnya
-    print("\n" + "="*40)
-    print("HASIL REKOMENDASI LOKER TERBAIK:")
-    print("="*40)
-    
-    for i in range(len(hasil['ids'][0])):
-        metadata = hasil['metadatas'][0][i]
-        jarak = hasil['distances'][0][i] if 'distances' in hasil else "N/A"
-        
-        print(f"\n{i+1}. Posisi     : {metadata['posisi']}")
-        print(   f"   Perusahaan : {metadata['perusahaan']}")
-        print(   f"   Lokasi     : {metadata['lokasi']}")
-        print(   f"   Link       : {metadata['url']}")
-        print(   f"   Skor Jarak : {jarak:.4f} (Semakin kecil semakin mirip)")
-
-if __name__ == "__main__":
-    # Contoh curhatan user untuk dites
-    curhatan = "Aku punya pengalaman di bidang perbaikan elektronik dan mesin, pengen kerja teknisi di sekitar Bekasi"
-    
-    cari_loker_cocok(curhatan)
+    konteks_gabungan = ""
+    if hasil['documents'] and len(hasil['documents'][0]) > 0:
+        for i in range(len(hasil['ids'][0])):
+            metadata = hasil['metadatas'][0][i]
+            dokumen = hasil['documents'][0][i]
+            
+            # HAPUS semua print() di sini!
+            # print(f"\n{i+1}. Posisi     : {metadata['posisi']}") ... dll
+            
+            konteks_gabungan += f"[Loker {i+1}]:\n{dokumen}\nLink: {metadata['url']}\n\n"
+            
+        return konteks_gabungan
+    else:
+        return "Tidak ada lowongan yang ditemukan."
