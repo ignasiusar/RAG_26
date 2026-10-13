@@ -10,7 +10,7 @@ from retriever import retrieve_relevant_jobs
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Inisialisasi Aplikasi FastAPI (Ini yang tadi hilang!)
+
 app = FastAPI(title="API AI Konsultan Karir")
 
 DB_CONNECTION = os.getenv("DB_CONNECTION", "sqlite").lower()
@@ -113,35 +113,35 @@ ATURAN JAWABAN:
 
 model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=instruksi_sistem)
 
-# Skema Request JSON
+
 class ChatRequest(BaseModel):
     user_session_id: str
     message: str
 
-# ENDPOINT API
+
 @app.post("/chat")
 def chat_endpoint(request: ChatRequest):
     user_id = request.user_session_id
     user_message = request.message
     
-    # Simpan pertanyaan ke DB
+    
     simpan_pesan(user_id, "user", user_message)
     
-    # Muat memori dari DB & Set obrolan
+    
     history = muat_history(user_id)
     chat_session = model.start_chat(history=history)
     
-    # Cari loker di Vector DB
+    
     konteks_loker = retrieve_relevant_jobs(user_message)
     
-    # Gabungkan prompt
+    
     prompt_harian = f"[Data Loker dari Database]:\n{konteks_loker}\n\nUcapan/Pertanyaan User: \"{user_message}\"\n(Berikan balasan natural sesuai ucapan user di atas)"
     
-    # Dapatkan respons dari Gemini
+    
     response = chat_session.send_message(prompt_harian)
     bot_reply = response.text
     
-    # Simpan jawaban ke DB
+    
     simpan_pesan(user_id, "model", bot_reply)
     
     return {
