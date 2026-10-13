@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # Service 1: Backend Python AI
+  backend-ai:
+    build: 
+      context: ./ai
+    container_name: rag_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # Asumsi API jalan di port 8000
+    deploy:
+      resources:
+        limits:
+          memory: 1G # Maksimal RAM 1 GB untuk proses AI/RAG
+
+  # Service 2: Frontend Vite/React
+  frontend-view:
+    build: 
+      context: ./view
+    container_name: rag_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173" # Port default Vite
+    depends_on:
+      - backend-ai # Frontend akan menunggu API menyala terlebih dahulu
+    deploy:
+      resources:
+        limits:
+          memory: 512M # Maksimal RAM 512 MB untuk UI

@@ -13,6 +13,14 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI(title="API AI Konsultan Karir")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Mengizinkan UI dari port berapapun (termasuk 5173) untuk masuk
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 DB_CONNECTION = os.getenv("DB_CONNECTION", "sqlite").lower()
 
 def init_db():
