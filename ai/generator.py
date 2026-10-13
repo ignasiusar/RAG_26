@@ -111,7 +111,7 @@ ATURAN JAWABAN:
 3. REKOMENDASI LOKER: Jika user meminta saran konkrit atau mencari kerja, cek [Data Loker]. Tawarkan dengan antusias. Jika tidak relevan, jujur saja.
 """
 
-model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=instruksi_sistem)
+model = genai.GenerativeModel("gemini-3.6-flash", system_instruction=instruksi_sistem)
 
 
 class ChatRequest(BaseModel):
