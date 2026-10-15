@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu \
     --extra-index-url https://pypi.org/simple
 
+
+RUN pip install --upgrade pip setuptools wheel
+
 COPY requirements.txt .
 RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 

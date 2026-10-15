@@ -21,7 +21,7 @@ def _get_model():
 @lru_cache(maxsize=1)
 def _get_collection():
     client = chromadb.PersistentClient(path=DB_PATH)
-    return client.get_collection(name=COLLECTION_NAME)
+    return client.get_or_create_collection(name=COLLECTION_NAME)
 
 def retrieve_relevant_jobs(pertanyaan_user:str, jumlah_hasil: int = 3)-> list[dict]:
     try:
