@@ -1,19 +1,21 @@
-# Menggunakan base image Python versi ringan
 FROM python:3.10-slim
-
-# Menentukan folder kerja di dalam container
 WORKDIR /app
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 HF_HOME=/app/.hf_cache
 
-# Menyalin file requirements terlebih dahulu untuk efisiensi cache Docker
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple
+
 COPY requirements.txt .
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 
-# Menginstal dependency Python tanpa menyimpan cache (agar ringan)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')"
 
-# Menyalin seluruh kode AI (termasuk folder db_loker dan .env jika ada)
 COPY . .
-
-# Menjalankan server Uvicorn untuk FastAPI
-# FORMAT: uvicorn <nama_file_tanpa_py>:<nama_variabel_FastAPI> --host 0.0.0.0 --port 8000
+EXPOSE 8000
 CMD ["uvicorn", "generator:app", "--host", "0.0.0.0", "--port", "8000"]
-

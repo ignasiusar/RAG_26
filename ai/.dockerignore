@@ -1,0 +1,7 @@
+.env
+.venv
+__pycache__/
+*.pyc
+chat_history.db
+db_loker/
+.git

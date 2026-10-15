@@ -7,3 +7,4 @@ chromadb
 numpy
 huggingface_hub
 sentence-transformers
+pandas
