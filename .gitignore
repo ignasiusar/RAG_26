@@ -1,1 +1,7 @@
-.env
+# Folder konfigurasi Kilo
+.kilo/
+**/.kilo/
+
+# Folder dependency Node.js
+node_modules/
+**/node_modules/
