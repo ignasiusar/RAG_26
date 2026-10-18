@@ -27,7 +27,13 @@ app.add_middleware(
 @app.on_event("startup")
 def warmup():
     _get_model()
-    _get_collection()
+    try:
+        _get_collection()
+    except Exception:
+        from data_ingest import process_and_store_data
+        process_and_store_data()
+        _get_collection.cache_clear()
+        _get_collection()
 
 DB_CONNECTION = os.getenv("DB_CONNECTION", "sqlite").lower()
 
