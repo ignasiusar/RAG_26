@@ -9,6 +9,7 @@ import ChatMessage, { type MessageRole } from "./ChatMessage";
 import SuggestedPrompt from "./SuggestedPrompt";
 import TypingIndicator from "./TypingIndicator";
 import { type SourceItem } from "./SourceList";
+import { sendChat, type ApiSource } from "../../services/ragApi";
 import "../../styles/chat.css";
 
 interface Message {
@@ -19,32 +20,16 @@ interface Message {
     sources?: SourceItem[];
 }
 
-const initialMessages: Message[] = [
-    {
-        id: "message-1",
-        role: "assistant",
-        content:
-            "Halo! Saya bisa membantu kamu mencari pekerjaan berdasarkan posisi, lokasi, dan kemampuan yang kamu miliki.",
-        time: "15.38",
-    },
-];
+// crypto.randomUUID hanya ada di konteks aman (HTTPS / localhost).
+// Fallback ini mencegah crash saat FE dibuka dari HP lewat http://IP-laptop.
+function makeId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
-const mockSources: SourceItem[] = [
-    {
-        id: "source-1",
-        title: "LinkedIn Jobs",
-        description: "Sumber pencarian lowongan pekerjaan",
-        url: "https://www.linkedin.com/jobs/",
-    },
-    {
-        id: "source-2",
-        title: "JobStreet Indonesia",
-        description: "Sumber informasi posisi dan perusahaan",
-        url: "https://www.jobstreet.co.id/",
-    },
-];
-
-function getCurrentTime() {
+function getCurrentTime(): string {
     return new Intl.DateTimeFormat("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
@@ -54,14 +39,45 @@ function getCurrentTime() {
         .replace(".", ":");
 }
 
+function createInitialMessages(): Message[] {
+    return [
+        {
+            id: "message-1",
+            role: "assistant",
+            content:
+                "Halo! Saya bisa membantu kamu mencari pekerjaan berdasarkan posisi, lokasi, dan kemampuan yang kamu miliki.",
+            time: getCurrentTime(),
+        },
+    ];
+}
+
+function toSourceItems(sources: ApiSource[]): SourceItem[] {
+    const seen = new Set<string>();
+    const items: SourceItem[] = [];
+
+    for (const s of sources) {
+        if (!s.url || seen.has(s.url)) continue;
+        seen.add(s.url);
+        items.push({
+            id: `source-${items.length}`,
+            title: `${s.posisi} - ${s.perusahaan}`,
+            description: s.lokasi,
+            url: s.url,
+        });
+    }
+    return items;
+}
+
 function ChatPanel() {
-    const [messages, setMessages] = useState<Message[]>(initialMessages);
+    const [messages, setMessages] = useState<Message[]>(createInitialMessages);
     const [hasStarted, setHasStarted] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const bottomMessageRef = useRef<HTMLDivElement>(null);
-    const responseTimeoutRef = useRef<number | null>(null);
+    // Session id disimpan di ref: dipakai backend untuk memuat riwayat,
+    // dan jadi penanda untuk mengabaikan respons "basi" setelah chat di-reset.
+    const sessionIdRef = useRef<string>(makeId());
 
     useEffect(() => {
         bottomMessageRef.current?.scrollIntoView({
@@ -70,61 +86,58 @@ function ChatPanel() {
         });
     }, [messages, isTyping]);
 
-    useEffect(() => {
-        return () => {
-            if (responseTimeoutRef.current !== null) {
-                window.clearTimeout(responseTimeoutRef.current);
-            }
-        };
-    }, []);
+    const appendMessage = (message: Message) => {
+        setMessages((current) => [...current, message]);
+    };
 
-    const handleSendMessage = (content: string) => {
-        if (isTyping) {
-            return;
-        }
+    const handleSendMessage = async (content: string) => {
+        if (isTyping) return;
 
-        const userMessage: Message = {
-            id: crypto.randomUUID(),
+        const sessionAtSend = sessionIdRef.current;
+
+        appendMessage({
+            id: makeId(),
             role: "user",
             content,
             time: getCurrentTime(),
-        };
-
-        setMessages((currentMessages) => [
-            ...currentMessages,
-            userMessage,
-        ]);
-
+        });
         setHasStarted(true);
         setIsTyping(true);
 
-        responseTimeoutRef.current = window.setTimeout(() => {
-            const assistantMessage: Message = {
-                id: crypto.randomUUID(),
+        try {
+            const data = await sendChat(sessionAtSend, content);
+            if (sessionAtSend !== sessionIdRef.current) return; // chat sudah di-reset
+
+            const sources = toSourceItems(data.sources);
+            appendMessage({
+                id: makeId(),
+                role: "assistant",
+                content: data.reply,
+                time: getCurrentTime(),
+                sources: sources.length > 0 ? sources : undefined,
+            });
+        } catch (err) {
+            if (sessionAtSend !== sessionIdRef.current) return;
+
+            appendMessage({
+                id: makeId(),
                 role: "assistant",
                 content:
-                    "Berikut contoh tampilan sumber yang nantinya akan dihasilkan dari proses pencarian RAG.",
+                    err instanceof Error
+                        ? `Maaf, ${err.message}`
+                        : "Maaf, terjadi kesalahan. Coba lagi sebentar.",
                 time: getCurrentTime(),
-                sources: mockSources,
-            };
-
-            setMessages((currentMessages) => [
-                ...currentMessages,
-                assistantMessage,
-            ]);
-
-            setIsTyping(false);
-            responseTimeoutRef.current = null;
-        }, 1200);
+            });
+        } finally {
+            if (sessionAtSend === sessionIdRef.current) {
+                setIsTyping(false);
+            }
+        }
     };
 
     const handleResetChat = () => {
-        if (responseTimeoutRef.current !== null) {
-            window.clearTimeout(responseTimeoutRef.current);
-            responseTimeoutRef.current = null;
-        }
-
-        setMessages(initialMessages);
+        sessionIdRef.current = makeId(); // sesi baru = riwayat backend baru
+        setMessages(createInitialMessages());
         setHasStarted(false);
         setIsTyping(false);
         setIsMenuOpen(false);

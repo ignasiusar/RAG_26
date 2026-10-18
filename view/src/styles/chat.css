@@ -558,3 +558,13 @@
     color: #2563eb;
     background: #eff6ff;
 }
+
+.chat-message__markdown > :first-child { margin-top: 0; }
+.chat-message__markdown > :last-child { margin-bottom: 0; }
+.chat-message__markdown p { margin: 0 0 0.6em; font-size: 14px; line-height: 1.65; }
+.chat-message__markdown strong { font-weight: 700; color: #1d2939; }
+.chat-message__markdown ul,
+.chat-message__markdown ol { margin: 0 0 0.6em; padding-left: 1.25em; font-size: 14px; line-height: 1.65; }
+.chat-message__markdown li { margin-bottom: 0.25em; }
+.chat-message__markdown a { color: #2563eb; text-decoration: underline; }
+.chat-message__markdown code { padding: 1px 5px; border-radius: 4px; background: #f2f4f7; font-size: 13px; }
