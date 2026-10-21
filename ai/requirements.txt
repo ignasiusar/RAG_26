@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+google-generativeai
+python-dotenv
+mysql-connector-python
+chromadb
+numpy
+huggingface_hub
+sentence-transformers
+pandas
