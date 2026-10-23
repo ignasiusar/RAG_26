@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 from sentence_transformers import SentenceTransformer
 import chromadb
 
@@ -9,7 +10,6 @@ COLLECTION_NAME = "kumpulan_loker"
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CSV_PATH = "id-jobstreet-com-2026-10-05-2.csv"
 
-
 def process_and_store_data():
     print("1. Membaca & membersihkan data...")
     df = get_clean_data(CSV_PATH)
@@ -17,16 +17,19 @@ def process_and_store_data():
     print("2. Menyiapkan teks & metadata...")
     ids, documents, metadatas = [], [], []
     for _, row in df.iterrows():
-        ids.append(f"job_{abs(hash(row['URL']))}")
+        ids.append(f"job_{row['Job_ID']}")
         documents.append(
             f"Posisi: {row['Posisi']}. Perusahaan: {row['Perusahaan']}. "
-            f"Tipe: {row['Tipe_Kerja']}. Lokasi: {row['Lokasi']}. "
-            f"Deskripsi: {row['Deskripsi_lengkap']}"
+            f"Industri: {row['Industri']}. Tipe: {row['Tipe_Kerja']}. "
+            f"Lokasi: {row['Lokasi']}. Deskripsi: {row['Deskripsi_lengkap']}"
         )
         metadatas.append({
             "posisi": str(row["Posisi"]),
             "perusahaan": str(row["Perusahaan"]),
             "lokasi": str(row["Lokasi"]),
+            "tipe_kerja": str(row["Tipe_Kerja"]),
+            "industri": str(row["Industri"]),
+            "gaji": str(row["Gaji"]) if pd.notna(row["Gaji"]) else "",
             "url": str(row["URL"]),
         })
 
@@ -48,7 +51,6 @@ def process_and_store_data():
                       embeddings=embeddings, metadatas=metadatas)
 
     print(f"Selesai. Total data: {collection.count()}")
-
 
 if __name__ == "__main__":
     process_and_store_data()
