@@ -36,6 +36,8 @@ def warmup():
         _get_collection()
 
 DB_CONNECTION = os.getenv("DB_CONNECTION", "sqlite").lower()
+SQLITE_PATH = os.getenv("SQLITE_PATH", "chat_history.db")
+os.makedirs(os.path.dirname(SQLITE_PATH) or ".", exist_ok=True)
 
 def init_db():
     if DB_CONNECTION == "mysql":
@@ -59,7 +61,7 @@ def init_db():
         cursor.close()
         conn.close()
     else:
-        conn = sqlite3.connect("chat_history.db")
+        conn = sqlite3.connect(SQLITE_PATH)
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages(
@@ -88,7 +90,7 @@ def muat_history(session_id: str):
         cursor.close()
         conn.close()
     else:
-        conn = sqlite3.connect("chat_history.db")
+        conn = sqlite3.connect(SQLITE_PATH)
         cursor = conn.cursor()
         cursor.execute('SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC', (session_id,))
         rows = cursor.fetchall()
@@ -115,7 +117,7 @@ def simpan_pesan(session_id: str, role: str, content: str):
         cursor.close()
         conn.close()
     else:
-        conn = sqlite3.connect("chat_history.db")
+        conn = sqlite3.connect(SQLITE_PATH)
         cursor = conn.cursor()
         cursor.execute('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)', (session_id, role, content))
         conn.commit()
