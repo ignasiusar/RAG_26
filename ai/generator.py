@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import time
 import mysql.connector
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -188,6 +189,19 @@ def build_prompt(konteks: str, user_message: str) -> str:
 
 @app.post("/chat")
 def chat_endpoint(request: ChatRequest):
+    t0 = time.perf_counter()
+    history = muat_history(request.user_session_id)[-MAX_HISTORY:]
+    if history and history[0]["role"] == "model":
+        history = history[1:]
+    t1 = time.perf_counter()
+
+    query = tulis_ulang_query(request.message)
+    t2 = time.perf_counter()
+
+    job = retrieve_relevant_jobs(query)          # pakai hasil rewrite
+    konteks = format_konteks(job)
+    t3 = time.perf_counter()
+    
     history = muat_history(request.user_session_id) [-MAX_HISTORY:]
 
     if history and history[0]["role"]== "model":
@@ -195,7 +209,7 @@ def chat_endpoint(request: ChatRequest):
 
     query = tulis_ulang_query(request.message)
     logger.info("Query pencarian: %s", query)
-    job = retrieve_relevant_jobs(request.message)
+    job = retrieve_relevant_jobs(query)
     konteks = format_konteks(job)
 
     try:
