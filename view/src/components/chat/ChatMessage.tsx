@@ -1,5 +1,6 @@
 import { BriefcaseBusiness, User } from "lucide-react";
 import SourceList, { type SourceItem } from "./SourceList";
+import ReactMarkdown from "react-markdown";
 
 export type MessageRole = "assistant" | "user";
 
@@ -33,7 +34,23 @@ function ChatMessage({
 
             <div className="chat-message__body">
                 <div className="chat-message__bubble">
-                    <p>{content}</p>
+                    {isUser ? (
+                        <p>{content}</p>
+                    ) : (
+                        <div className="chat-message__markdown">
+                            <ReactMarkdown
+                                components={{
+                                    a: ({ href, children }) => (
+                                        <a href={href} target="_blank" rel="noreferrer">
+                                            {children}
+                                        </a>
+                                    ),
+                                }}
+                            >
+                                {content}
+                            </ReactMarkdown>
+                        </div>
+                    )}
                 </div>
 
                 {!isUser && <SourceList sources={sources} />}

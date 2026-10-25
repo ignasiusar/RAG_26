@@ -85,41 +85,66 @@ def detect_locations(pertanyaan: str, index: dict[str, set[str]]) -> list[str]:
     return sorted(hasil)
 
 
-def retrieve_relevant_jobs(pertanyaan_user: str, jumlah_hasil: int = 5) -> list[dict]:
+ALIAS_LOKASI = {
+    "jawabarat": "jawa barat", "jabar": "jawa barat",
+    "jateng": "jawa tengah", "jatim": "jawa timur",
+    "jabodetabek": "jakarta bekasi bogor depok tangerang",
+    "sekitaran jakarta": "jakarta bekasi bogor depok tangerang",
+    "sekitar jakarta": "jakarta bekasi bogor depok tangerang",
+}
+
+
+def _pakai_alias(q: str) -> str:
+    q = q.lower()
+    for k, v in ALIAS_LOKASI.items():
+        q = q.replace(k, v)
+    return q
+
+
+def retrieve_relevant_jobs(pertanyaan_user: str, jumlah_hasil: int = 5,
+                           kandidat_chunk: int = 20) -> list[dict]:
     try:
         vektor = _get_model().encode(pertanyaan_user).tolist()
         col = _get_collection()
 
-        lokasi_cocok = detect_locations(pertanyaan_user, _get_location_index())
+        lokasi_cocok = detect_locations(_pakai_alias(pertanyaan_user), _get_location_index())
         hasil = None
         if lokasi_cocok:
             logger.info("Filter lokasi: %s", lokasi_cocok)
             hasil = col.query(
                 query_embeddings=[vektor],
-                n_results=jumlah_hasil,
+                n_results=kandidat_chunk,
                 where={"lokasi": {"$in": lokasi_cocok}},
             )
             if not hasil["ids"][0]:
-                hasil = None  
+                hasil = None
 
         if hasil is None:
-            hasil = col.query(query_embeddings=[vektor], n_results=jumlah_hasil)
+            hasil = col.query(query_embeddings=[vektor], n_results=kandidat_chunk)
     except Exception:
         logger.exception("Retrieve Gagal")
         return []
 
-    jobs = []
+    per_job: dict[str, dict] = {}
     for meta, doc, dist in zip(
         hasil["metadatas"][0], hasil["documents"][0], hasil["distances"][0]
     ):
         if MAX_DISTANCE is not None and dist > MAX_DISTANCE:
             continue
-        jobs.append({
+        j = per_job.setdefault(meta["job_id"], {
+            "gaji": meta.get("gaji", ""),
+            "tipe_kerja": meta.get("tipe_kerja", ""),
             "posisi": meta["posisi"],
             "perusahaan": meta["perusahaan"],
             "lokasi": meta["lokasi"],
             "url": meta["url"],
-            "dokumen": doc[:MAX_DOC_CHARS],
             "distance": round(dist, 4),
+            "potongan": [],
         })
+        if len(j["potongan"]) < 3:
+            j["potongan"].append(doc)
+
+    jobs = sorted(per_job.values(), key=lambda j: j["distance"])[:jumlah_hasil]
+    for j in jobs:
+        j["dokumen"] = "\n".join(j.pop("potongan"))
     return jobs

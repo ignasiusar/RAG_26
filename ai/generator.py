@@ -135,11 +135,31 @@ ATURAN JAWABAN:
 3. REKOMENDASI LOKER: Jika user meminta saran konkrit atau mencari kerja, cek [Data Loker]. Tawarkan dengan antusias. Jika tidak relevan, jujur saja.
 4. DILARANG MENGARANG: Rekomendasikan HANYA loker yang ada di [Data Loker].
    Jangan membuat posisi, perusahaan, atau link yang tidak tertulis di sana.
+5: GAJI: Soal gaji, hanya sebut angka yang tertulis di baris "Gaji:". Jangan menebak atau menggeneralisasi
+6. JANGAN MEMBUAT LINK: Jangan membuat link baru. Hanya gunakan link yang ada di [Data Loker].
+[Data Loker] adalah kumpulan lowongan kerja yang relevan dengan pertanyaan user.
+7. JUJUR SOAL CAKUPAN: Jika user menyebut bidang (mis. psikologi/HR) yang tidak ada di [Data Loker], katakan terus terang bahwa database belum punya loker bidang itu. Bedakan jelas antara FAKTA dari data dan SARAN UMUM dari kamu.
+8. LOKASI & GAJI: Jika loker berada jauh dari lokasi yang user sebut, atau gajinya di bawah target user, sebutkan itu.
+
 """
 
 model = genai.GenerativeModel("gemini-3.6-flash", system_instruction=instruksi_sistem)
+rewriter = genai.GenerativeModel("gemini-3.6-flash")
 
-
+def tulis_ulang_query(pesan: str) -> str:
+    prompt = (
+        "Ubah pesan user berikut jadi query pencarian lowongan kerja yang pendek "
+        "(maksimal 15 kata): posisi, skill, lokasi, gaji. Buang basa-basi dan candaan. "
+        "Tulis nama lokasi dengan ejaan baku (mis. 'Jawa Barat'). "
+        "Keluarkan hanya query, tanpa penjelasan.\n\nPesan: " + pesan
+    )
+    try:
+        hasil = rewriter.generate_content(prompt).text.strip()
+        return hasil or pesan
+    except Exception:
+        logger.exception("Rewrite gagal, pakai pesan asli")
+        return pesan
+    
 class ChatRequest(BaseModel):
     user_session_id: str
     message: str
@@ -149,12 +169,14 @@ logger = logging.getLogger(__name__)
 
 MAX_HISTORY = 20
 
-def format_konteks(jobs :list[dict]) -> str:
+def format_konteks(jobs: list[dict]) -> str:
     if not jobs:
         return "Tidak ada data loker yang relevan."
     return "\n\n".join(
-        f"[Loker {i+1}]:\n{j['dokumen']}\n Link: {j['url']}"
-        for i,j in enumerate(jobs)
+        f"[Loker {i+1}]: {j['posisi']} - {j['perusahaan']} ({j['lokasi']})\n"
+        f"Gaji: {j['gaji'] or 'tidak dicantumkan'}\n"
+        f"{j['dokumen']}\nLink: {j['url']}"
+        for i, j in enumerate(jobs)
     )
 
 def build_prompt(konteks: str, user_message: str) -> str:
@@ -171,6 +193,8 @@ def chat_endpoint(request: ChatRequest):
     if history and history[0]["role"]== "model":
         history = history[1:]
 
+    query = tulis_ulang_query(request.message)
+    logger.info("Query pencarian: %s", query)
     job = retrieve_relevant_jobs(request.message)
     konteks = format_konteks(job)
 
@@ -184,8 +208,9 @@ def chat_endpoint(request: ChatRequest):
 
     simpan_pesan(request.user_session_id, "user", request.message)
     simpan_pesan(request.user_session_id, "model", bot_reply)
+    sumber = [j for j in job if j["url"] in bot_reply]
+    return {"status": "success", "reply": bot_reply, "sources": [{k: j[k] for k in ("posisi", "perusahaan", "lokasi", "url")} for j in sumber]} 
 
-    return {"status": "success", "reply": bot_reply, "sources": [{k: j[k] for k in ("posisi", "perusahaan", "lokasi", "url")} for j in job]} 
 
 @app.get("/health")
 def health():
