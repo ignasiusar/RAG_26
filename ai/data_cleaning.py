@@ -85,7 +85,7 @@ def get_clean_data(file_csv):
     
    
     df_bersih = df_bersih.dropna(subset=["Job_ID"]).drop_duplicates("Job_ID")
-    df_bersih = df_bersih.drop(columns=["teks_mentah", "Job_ID"])
+    df_bersih = df_bersih.drop(columns=["teks_mentah"])
 
     df_bersih["Deskripsi_lengkap"] = df_bersih["Deskripsi_lengkap"].apply(deep_clean_deskripsi)
     

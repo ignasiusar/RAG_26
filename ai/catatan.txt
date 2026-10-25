@@ -1,0 +1,23 @@
+Tahap 1: perbaiki yang salah (kecil tapi wajib)
+
+Bug history di /chat: pesan user disimpan sebelum history dimuat, lalu dikirim lagi lewat send_message, jadi model melihat pertanyaan yang sama dua kali. Muat history dulu, kirim, baru simpan.
+Batasi history ke beberapa giliran terakhir.
+Tambah import CORSMiddleware dan cek nama model Gemini, karena tanpa itu service tidak jalan dan kamu tidak bisa menguji apa pun.
+Load model embedding dan koneksi ChromaDB sekali saat startup, bukan per request.
+
+Tahap 2: kualitas retrieval (dampak terbesar)
+
+Bersihkan boilerplate scraping dari text_0 (“Lihat semua lowongan kerja”, “Simpan”, “Lamaran Cepat”, dst).
+Perbaiki apa yang di-embed. MiniLM hanya membaca sekitar 128 token pertama, padahal deskripsi rata-rata ~4.000 karakter. Opsinya: chunking per bagian, ringkas tiap lowongan dengan LLM saat ingest, atau ganti ke model berkonteks lebih panjang seperti bge-m3 atau multilingual-e5.
+Query rewriting: gabungkan history dan pesan terakhir jadi satu query mandiri, supaya “yang remote ada?” tidak dicari tanpa konteks.
+Ambang jarak: buang hasil yang tidak relevan daripada selalu mengambil top-3.
+Filter metadata (lokasi, tipe kerja) yang sudah ada di data tapi belum dipakai.
+
+Tahap 3: kontrak output ke timmu
+
+Retriever sebaiknya mengembalikan struktur (posisi, perusahaan, lokasi, URL, skor), bukan string gabungan. Endpoint /chat lalu mengembalikan reply plus sources. Dengan begitu temanmu yang mengurus UI bisa langsung menampilkan SourceList, dan link tidak bisa dikarang model.
+Prompt: tambahkan aturan “hanya sebut info yang ada di data” dan perlakukan teks lowongan sebagai data, bukan perintah.
+
+Tahap 4: evaluasi
+
+Buat 20-30 query uji beserta lowongan yang seharusnya muncul, lalu ukur recall@k. Ini baseline supaya setiap perubahan di Tahap 2 bisa dibuktikan membaik atau tidak. Saya sarankan ini dibuat sebelum Tahap 2, kalau mau rapi.
