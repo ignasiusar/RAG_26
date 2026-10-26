@@ -8,10 +8,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from retriever import retrieve_relevant_jobs, _get_model, _get_collection
+from llm_router import build_router, AllProvidersFailed
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+router = build_router()
 
 
 app = FastAPI(title="API AI Konsultan Karir")
@@ -100,7 +102,7 @@ def muat_history(session_id: str):
     for role, content in rows:
         history.append({
             "role": role,
-            "parts": [content]
+            "content": content
         })
     return history
 
@@ -141,25 +143,12 @@ ATURAN JAWABAN:
 [Data Loker] adalah kumpulan lowongan kerja yang relevan dengan pertanyaan user.
 7. JUJUR SOAL CAKUPAN: Jika user menyebut bidang (mis. psikologi/HR) yang tidak ada di [Data Loker], katakan terus terang bahwa database belum punya loker bidang itu. Bedakan jelas antara FAKTA dari data dan SARAN UMUM dari kamu.
 8. LOKASI & GAJI: Jika loker berada jauh dari lokasi yang user sebut, atau gajinya di bawah target user, sebutkan itu.
+9. PANJANG: Jawab maksimal sekitar 120 kata. Rekomendasikan paling banyak 3 loker. Hindari mengulang isi pertanyaan user dan hindari pembukaan panjang.
 
 """
 
 model = genai.GenerativeModel("gemini-3.6-flash", system_instruction=instruksi_sistem)
-rewriter = genai.GenerativeModel("gemini-3.6-flash")
 
-def tulis_ulang_query(pesan: str) -> str:
-    prompt = (
-        "Ubah pesan user berikut jadi query pencarian lowongan kerja yang pendek "
-        "(maksimal 15 kata): posisi, skill, lokasi, gaji. Buang basa-basi dan candaan. "
-        "Tulis nama lokasi dengan ejaan baku (mis. 'Jawa Barat'). "
-        "Keluarkan hanya query, tanpa penjelasan.\n\nPesan: " + pesan
-    )
-    try:
-        hasil = rewriter.generate_content(prompt).text.strip()
-        return hasil or pesan
-    except Exception:
-        logger.exception("Rewrite gagal, pakai pesan asli")
-        return pesan
     
 class ChatRequest(BaseModel):
     user_session_id: str
@@ -195,37 +184,43 @@ def chat_endpoint(request: ChatRequest):
         history = history[1:]
     t1 = time.perf_counter()
 
-    query = tulis_ulang_query(request.message)
+    job = retrieve_relevant_jobs(request.message)
+    konteks = format_konteks(job)
     t2 = time.perf_counter()
 
-    job = retrieve_relevant_jobs(query)          # pakai hasil rewrite
-    konteks = format_konteks(job)
-    t3 = time.perf_counter()
-    
-    history = muat_history(request.user_session_id) [-MAX_HISTORY:]
-
-    if history and history[0]["role"]== "model":
-        history = history[1:]
-
-    query = tulis_ulang_query(request.message)
-    logger.info("Query pencarian: %s", query)
-    job = retrieve_relevant_jobs(query)
-    konteks = format_konteks(job)
-
     try:
-        chat = model.start_chat(history=history)
-        response = chat.send_message(build_prompt(konteks,request.message))
-        bot_reply = response.text
-    except Exception:
-        logger.exception("LLM Gagal Merespons")
-        raise HTTPException(status_code=502, detail="Terjadi kesalahan saat memproses permintaan.")
+        bot_reply, provider = router.generate(
+            instruksi_sistem,
+            history,
+            build_prompt(konteks, request.message),
+        )
+    except AllProvidersFailed:
+        raise HTTPException(
+            status_code=503,
+            detail="Semua layanan AI sedang penuh. Coba lagi nanti.",
+        )
+    t3 = time.perf_counter()
+
+    print(
+        f"TIMING history={t1-t0:.2f}s retrieve={t2-t1:.2f}s "
+        f"llm={t3-t2:.2f}s total={t3-t0:.2f}s",
+        flush=True,
+    )
 
     simpan_pesan(request.user_session_id, "user", request.message)
     simpan_pesan(request.user_session_id, "model", bot_reply)
     sumber = [j for j in job if j["url"] in bot_reply]
-    return {"status": "success", "reply": bot_reply, "sources": [{k: j[k] for k in ("posisi", "perusahaan", "lokasi", "url")} for j in sumber]} 
+    return {
+        "status": "success",
+        "reply": bot_reply,
+        "sources": [
+            {k: j[k] for k in ("posisi", "perusahaan", "lokasi", "url")}
+            for j in sumber
+        ],
+        "provider": provider,
+    }
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}           
+    return {"status": "ok"}

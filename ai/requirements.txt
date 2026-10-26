@@ -8,3 +8,4 @@ numpy
 huggingface_hub
 sentence-transformers
 pandas
+openai

@@ -23,6 +23,8 @@ GENERIC_WORDS = {"jawa", "kalimantan", "sulawesi", "nusa", "sumatera", "kepulaua
 def _get_model():
     return SentenceTransformer(MODEL_NAME)
 
+REQUIRED_META = {"job_id", "bagian", "gaji", "tipe_kerja", "url"}
+
 
 @lru_cache(maxsize=1)
 def _get_collection():
@@ -30,6 +32,9 @@ def _get_collection():
     col = client.get_collection(name=COLLECTION_NAME)
     if col.count() == 0:
         raise RuntimeError("Collection kosong")
+    meta = col.peek(1)["metadatas"][0]
+    if not REQUIRED_META <= set(meta):
+        raise RuntimeError("Skema index lama (field tidak lengkap), perlu ingest ulang")
     return col
 
 
