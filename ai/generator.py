@@ -137,7 +137,7 @@ ATURAN JAWABAN:
    Jangan membuat posisi, perusahaan, atau link yang tidak tertulis di sana.
 """
 
-model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=instruksi_sistem)
+model = genai.GenerativeModel("gemini-2.0-flash", system_instruction=instruksi_sistem)
 
 
 class ChatRequest(BaseModel):
