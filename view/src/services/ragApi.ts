@@ -24,7 +24,8 @@ export async function sendChat(
     });
 
     if (!res.ok) {
-        throw new Error(`Server error ${res.status}`);
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || `Server error ${res.status}`);
     }
     return res.json();
 }
