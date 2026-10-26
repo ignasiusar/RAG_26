@@ -9,7 +9,9 @@ from pydantic import BaseModel
 from retriever import retrieve_relevant_jobs, _get_model, _get_collection
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 
 
@@ -135,7 +137,7 @@ ATURAN JAWABAN:
    Jangan membuat posisi, perusahaan, atau link yang tidak tertulis di sana.
 """
 
-model = genai.GenerativeModel("gemini-3.6-flash", system_instruction=instruksi_sistem)
+model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=instruksi_sistem)
 
 
 class ChatRequest(BaseModel):
@@ -172,13 +174,33 @@ def chat_endpoint(request: ChatRequest):
     job = retrieve_relevant_jobs(request.message)
     konteks = format_konteks(job)
 
-    try:
-        chat = model.start_chat(history=history)
-        response = chat.send_message(build_prompt(konteks,request.message))
-        bot_reply = response.text
-    except Exception:
-        logger.exception("LLM Gagal Merespons")
-        raise HTTPException(status_code=502, detail="Terjadi kesalahan saat memproses permintaan.")
+    bot_reply = None
+
+    # Coba panggil Gemini jika API Key tersedia
+    if GEMINI_API_KEY:
+        try:
+            chat = model.start_chat(history=history)
+            response = chat.send_message(build_prompt(konteks, request.message))
+            bot_reply = response.text
+        except Exception as e:
+            logger.warning(f"LLM Gagal Merespons ({e}), menggunakan respon fallback lokal.")
+
+    # Fallback cerdas: jika Gemini tidak aktif/kuota habis, gunakan hasil pencarian database lokal
+    if not bot_reply:
+        if job:
+            daftar_rekomendasi = "\n".join(
+                [f"• **{j['posisi']}** di **{j['perusahaan']}** ({j['lokasi']})" for j in job]
+            )
+            bot_reply = (
+                f"Halo! Berikut beberapa lowongan pekerjaan yang cocok berdasarkan database kami:\n\n"
+                f"{daftar_rekomendasi}\n\n"
+                f"Silakan periksa kartu sumber di bawah untuk melihat rincian dan tautan lowongan."
+            )
+        else:
+            bot_reply = (
+                "Halo! Saya sudah memeriksa database kami, namun belum menemukan lowongan yang cocok dengan kata kunci tersebut. "
+                "Coba cari dengan kata kunci posisi, bidang, atau kota lain ya."
+            )
 
     simpan_pesan(request.user_session_id, "user", request.message)
     simpan_pesan(request.user_session_id, "model", bot_reply)
