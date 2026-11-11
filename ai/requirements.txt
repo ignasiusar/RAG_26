@@ -9,3 +9,4 @@ huggingface_hub
 sentence-transformers
 pandas
 openai
+argon2-cffi

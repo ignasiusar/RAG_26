@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from retriever import retrieve_relevant_jobs, _get_model, _get_collection
 from llm_router import build_router, AllProvidersFailed
+from auth import auth_router, init_auth_db
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -17,7 +18,7 @@ router = build_router()
 
 
 app = FastAPI(title="API AI Konsultan Karir")
-
+app.include_router(auth_router)
     
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +30,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def warmup():
+    init_auth_db()
     _get_model()
     try:
         _get_collection()

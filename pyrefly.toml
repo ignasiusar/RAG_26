@@ -1,0 +1,16 @@
+search-path = ["ai"]
+
+ignore-missing-imports = [
+    "fastapi",
+    "fastapi.*",
+    "mysql",
+    "mysql.*",
+    "google.generativeai",
+    "google.generativeai.*",
+    "dotenv",
+    "dotenv.*",
+    "pydantic",
+    "pydantic.*",
+    "argon2",
+    "argon2.*",
+]
