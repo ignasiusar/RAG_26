@@ -171,6 +171,7 @@ class ChatQuota:
         remaining = max(0, self.limit - used)
 
         return {
+            "server_time": now,
             "limit": self.limit,
             "used": used,
             "remaining": remaining,
@@ -242,8 +243,11 @@ class ChatQuota:
 
             return request_id
 
-    def complete(self, user_id, request_id):
-        """Mengurangi kuota setelah jawaban berhasil dibuat."""
+    def complete(self, user_id, request_id, persist=None):
+        """
+        Menyimpan hasil chat dan mengurangi kuota
+        dalam transaksi yang sama.
+        """
 
         with self._locked(user_id) as (cur, row, now):
             used, _, active, _ = row
@@ -257,9 +261,13 @@ class ChatQuota:
                     ),
                 )
 
+            # Jika penyimpanan gagal, transaksi dibatalkan
+            # sehingga kuota tidak ikut berkurang.
+            if persist is not None:
+                persist(cur)
+
             used += 1
 
-            # Cooldown dimulai setelah pesan ke-100 berhasil.
             reset_at = (
                 now + self.cooldown
                 if used >= self.limit
@@ -269,11 +277,11 @@ class ChatQuota:
             self._sql(
                 cur,
                 """
-                    UPDATE user_chat_quotas
-                    SET used = ?, reset_at = ?,
-                        active_request = NULL,
-                        active_until = 0
-                    WHERE user_id = ?
+                UPDATE user_chat_quotas
+                SET used = ?, reset_at = ?,
+                    active_request = NULL,
+                    active_until = 0
+                WHERE user_id = ?
                 """,
                 (used, reset_at, user_id),
             )
