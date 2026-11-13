@@ -135,301 +135,247 @@ function Brand() {
     );
 }
 
+function BackgroundDecor() {
+  return (
+    <div
+      className="tk-world tk-round-decor"
+      aria-hidden="true"
+    >
+      {Array.from({ length: 9 }, (_, i) => (
+        <span
+          key={i}
+          className={`tk-circle tk-circle-${i + 1}`}
+        />
+      ))}
+
+      <span className="tk-plus tk-plus-1">+</span>
+      <span className="tk-plus tk-plus-2">+</span>
+      <span className="tk-plus tk-plus-3">+</span>
+    </div>
+  );
+}
+
 function Auth({
-    onSuccess,
-    theme,
-    toggleTheme,
-    notice,
+  onSuccess,
+  theme,
+  toggleTheme,
+  notice,
 }: {
-    onSuccess: (user: User) => void;
-    theme: string;
-    toggleTheme: () => void;
-    notice: string;
+  onSuccess: (u: User) => void;
+  theme: string;
+  toggleTheme: () => void;
+  notice: string;
 }) {
-    const [register, setRegister] = useState(false);
-    const [show, setShow] = useState(false);
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState("");
-    const [info, setInfo] = useState("");
+  const [register, setRegister] = useState(false);
+  const [show, setShow] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
 
-    async function submit(event: FormEvent) {
-        event.preventDefault();
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
 
-        if (busy) return;
+    setBusy(true);
+    setError("");
 
-        setBusy(true);
-        setError("");
+    try {
+      if (register) {
+        await api.register(
+          name.trim(),
+          email.trim(),
+          password
+        );
 
-        try {
-            if (register) {
-                await api.register(
-                    name.trim(),
-                    email.trim(),
-                    password,
-                );
+        setRegister(false);
+        setInfo("Akun berhasil dibuat. Silakan masuk.");
+      }
 
-                setRegister(false);
-                setInfo(
-                    "Akun berhasil dibuat. Silakan masuk jika proses login belum selesai.",
-                );
-            }
-
-            onSuccess(
-                await api.login(
-                    email.trim(),
-                    password,
-                ),
-            );
-        } catch (err) {
-            setError(errorText(err));
-        } finally {
-            setBusy(false);
-        }
+      onSuccess(
+        await api.login(email.trim(), password)
+      );
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
     }
+  }
 
-    return (
-        <main className="auth-page">
-            <section className="auth-story">
-                <Brand />
+  return (
+    <main className="auth-page tk-auth">
+      <BackgroundDecor />
 
-                <div className="story-copy">
-                    <span className="eyebrow">
-                        LANGKAH KECIL. PELUANG BESAR.
-                    </span>
+      <section className="tk-auth-art">
+        <Brand />
+       <h1 className="tk-welcome-left">
+            <span>Selamat</span>
+            <span>datang.</span>
+        </h1>
+      </section>
 
-                    <h1>
-                        Karier berikutnya,
-                        <br />
-                        mulai dari
-                        <br />
-                        <em>percakapan ini.</em>
-                    </h1>
+      <section className="auth-form-section">
+        <button
+          className="icon-button auth-theme"
+          type="button"
+          aria-label={
+            theme === "light"
+              ? "Aktifkan tema gelap"
+              : "Aktifkan tema terang"
+          }
+          onClick={toggleTheme}
+        >
+          {theme === "light"
+            ? <Moon size={20} />
+            : <Sun size={20} />}
+        </button>
 
-                    <p>
-                        Temukan lowongan yang relevan,
-                        siapkan diri, dan susun langkah
-                        kariermu bersama TemuKerja.
-                    </p>
+        <div className="auth-form-wrap">
+          <div className="auth-mobile-brand">
+            <Brand />
+          </div>
 
-                    <div className="story-card">
-                        <span className="story-spark">
-                            <Sparkles size={23} />
-                        </span>
+          <h2>{register ? "DAFTAR" : "MASUK"}</h2>
 
-                        <div>
-                            <strong>
-                                Ruang untuk rencana besarmu
-                            </strong>
-                            <p>
-                                Lowongan kerja, persiapan CV,
-                                dan teman diskusi karier
-                                dalam satu tempat.
-                            </p>
-                        </div>
-                    </div>
-                </div>
+          <p className="muted">
+            {register
+              ? "Mulai perjalanan kariermu."
+              : "Lanjutkan langkah kariermu."}
+          </p>
 
-                <div className="story-bottom">
-                    <span>
-                        <Zap size={16} />
-                        100 pesan setiap isi ulang
-                    </span>
-                    <span>TemuKerja Assistant</span>
-                </div>
-            </section>
+          {notice && (
+            <p className="notice" role="status">
+              {notice}
+            </p>
+          )}
 
-            <section className="auth-form-section">
+          {info && (
+            <p className="notice" role="status">
+              {info}
+            </p>
+          )}
+
+          {error && (
+            <p className="error-box" role="alert">
+              {error}
+            </p>
+          )}
+
+          <form
+            onSubmit={submit}
+            className="auth-form"
+          >
+            {register && (
+              <label>
+                Nama lengkap
+                <input
+                  autoComplete="name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  minLength={2}
+                  maxLength={80}
+                  required
+                  placeholder="Nama kamu"
+                  disabled={busy}
+                />
+              </label>
+            )}
+
+            <label>
+              Email
+              <input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                maxLength={254}
+                required
+                placeholder="nama@email.com"
+                disabled={busy}
+              />
+            </label>
+
+            <label>
+              Password
+              <div className="password-field">
+                <input
+                  type={show ? "text" : "password"}
+                  autoComplete={
+                    register
+                      ? "new-password"
+                      : "current-password"
+                  }
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  placeholder={
+                    register
+                      ? "Minimal 8 karakter"
+                      : "Password kamu"
+                  }
+                  disabled={busy}
+                />
+
                 <button
-                    className="icon-button auth-theme"
-                    aria-label={
-                        theme === "light"
-                            ? "Aktifkan tema gelap"
-                            : "Aktifkan tema terang"
-                    }
-                    onClick={toggleTheme}
+                  type="button"
+                  className="icon-button"
+                  aria-label={
+                    show
+                      ? "Sembunyikan password"
+                      : "Tampilkan password"
+                  }
+                  onClick={() => setShow(!show)}
                 >
-                    {theme === "light" ? (
-                        <Moon size={20} />
-                    ) : (
-                        <Sun size={20} />
-                    )}
+                  {show
+                    ? <EyeOff size={18} />
+                    : <Eye size={18} />}
                 </button>
+              </div>
+            </label>
 
-                <div className="auth-form-wrap">
-                    <div className="auth-mobile-brand">
-                        <Brand />
-                    </div>
+            <button
+              className="primary auth-submit"
+              disabled={busy}
+            >
+              {busy ? (
+                <LoaderCircle
+                  className="spin"
+                  size={19}
+                />
+              ) : (
+                <>
+                  {register ? "Buat akun" : "Masuk"}
+                  <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+          </form>
 
-                    <span className="eyebrow">
-                        SELAMAT DATANG DI TEMUKERJA
-                    </span>
+          <p className="tk-auth-switch">
+            {register
+              ? "Sudah punya akun?"
+              : "Belum punya akun?"}
 
-                    <h2>
-                        {register
-                            ? "Mulai langkah barumu."
-                            : "Senang bertemu lagi."}
-                    </h2>
-
-                    <p className="muted">
-                        {register
-                            ? "Buat akun untuk menyimpan perjalanan kariermu."
-                            : "Masuk untuk melanjutkan percakapan dan rencana kariermu."}
-                    </p>
-
-                    <div className="auth-switch">
-                        <button
-                            type="button"
-                            aria-pressed={!register}
-                            disabled={busy}
-                            onClick={() => {
-                                setRegister(false);
-                                setError("");
-                            }}
-                        >
-                            Masuk
-                        </button>
-
-                        <button
-                            type="button"
-                            aria-pressed={register}
-                            disabled={busy}
-                            onClick={() => {
-                                setRegister(true);
-                                setError("");
-                            }}
-                        >
-                            Daftar akun
-                        </button>
-                    </div>
-
-                    {notice && (
-                        <p className="notice" role="status">
-                            {notice}
-                        </p>
-                    )}
-
-                    {info && (
-                        <p className="notice" role="status">
-                            {info}
-                        </p>
-                    )}
-
-                    {error && (
-                        <p className="error-box" role="alert">
-                            {error}
-                        </p>
-                    )}
-
-                    <form
-                        onSubmit={submit}
-                        className="auth-form"
-                    >
-                        {register && (
-                            <label>
-                                Nama lengkap
-                                <input
-                                    autoComplete="name"
-                                    value={name}
-                                    onChange={event =>
-                                        setName(event.target.value)
-                                    }
-                                    minLength={2}
-                                    maxLength={80}
-                                    required
-                                    placeholder="Nama kamu"
-                                    disabled={busy}
-                                />
-                            </label>
-                        )}
-
-                        <label>
-                            Email
-                            <input
-                                type="email"
-                                autoComplete="email"
-                                value={email}
-                                onChange={event =>
-                                    setEmail(event.target.value)
-                                }
-                                maxLength={254}
-                                required
-                                placeholder="nama@email.com"
-                                disabled={busy}
-                            />
-                        </label>
-
-                        <label>
-                            Password
-
-                            <div className="password-field">
-                                <input
-                                    type={show ? "text" : "password"}
-                                    autoComplete={
-                                        register
-                                            ? "new-password"
-                                            : "current-password"
-                                    }
-                                    value={password}
-                                    onChange={event =>
-                                        setPassword(event.target.value)
-                                    }
-                                    minLength={8}
-                                    maxLength={128}
-                                    required
-                                    placeholder="Minimal 8 karakter"
-                                    disabled={busy}
-                                />
-
-                                <button
-                                    type="button"
-                                    className="icon-button"
-                                    aria-label={
-                                        show
-                                            ? "Sembunyikan password"
-                                            : "Tampilkan password"
-                                    }
-                                    onClick={() => setShow(!show)}
-                                >
-                                    {show ? (
-                                        <EyeOff size={18} />
-                                    ) : (
-                                        <Eye size={18} />
-                                    )}
-                                </button>
-                            </div>
-                        </label>
-
-                        <button
-                            className="primary auth-submit"
-                            disabled={busy}
-                        >
-                            {busy ? (
-                                <LoaderCircle
-                                    className="spin"
-                                    size={19}
-                                />
-                            ) : (
-                                <>
-                                    {register
-                                        ? "Buat akun & mulai"
-                                        : "Masuk ke ruang kerja"}
-                                    <ArrowRight size={18} />
-                                </>
-                            )}
-                        </button>
-                    </form>
-
-                    <p className="auth-footnote">
-                        Percakapan dan kuota tersimpan
-                        pada akunmu.
-                    </p>
-                </div>
-            </section>
-        </main>
-    );
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setRegister(!register);
+                setError("");
+                setInfo("");
+              }}
+            >
+              {register ? "Masuk" : "Daftar"}
+            </button>
+          </p>
+        </div>
+      </section>
+    </main>
+  );
 }
 
 const MessageCard = memo(function MessageCard({
@@ -1296,6 +1242,7 @@ export default function App() {
             </aside>
 
             <main className="main-panel">
+                 <BackgroundDecor />
                 <header className="workspace-header">
                     <button
                         className="icon-button mobile-only"
