@@ -16,10 +16,12 @@ Konfigurasi lewat .env (hanya provider yang punya API key yang dipakai):
   GROQ_API_KEY=...        GROQ_MODEL=<id model dari console Groq>
   OLLAMA_URL=http://host.docker.internal:11434/v1  OLLAMA_MODEL=<model lokal>   # opsional
 """
+
 import logging
 import os
 import re
 import time
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +33,15 @@ class AllProvidersFailed(Exception):
 # --------------------------------------------------------------------------- #
 # Cooldown: berapa lama sebuah provider diistirahatkan setelah gagal
 # --------------------------------------------------------------------------- #
-_RE_RETRY = re.compile(r"retry in\s+(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?", re.IGNORECASE)
+_RE_RETRY = re.compile(
+    r"retry in\s+(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?", re.IGNORECASE
+)
 
 
 def _status(e: Exception):
-    return getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+    return getattr(e, "status_code", None) or getattr(
+        getattr(e, "response", None), "status_code", None
+    )
 
 
 def hitung_cooldown(e: Exception) -> int:
@@ -52,9 +58,13 @@ def hitung_cooldown(e: Exception) -> int:
     if nama == "ResourceExhausted" or status == 429:
         kecil = pesan.lower()
         return 3600 if any(k in kecil for k in ("per day", "daily", "quota")) else 60
-    if status in (401, 403, 404) or nama in ("PermissionDenied", "Unauthenticated", "NotFound"):
+    if status in (401, 403, 404) or nama in (
+        "PermissionDenied",
+        "Unauthenticated",
+        "NotFound",
+    ):
         return 3600  # kunci/model salah: jangan dicoba terus, tapi catat keras
-    return 30        # timeout, 5xx, koneksi putus
+    return 30  # timeout, 5xx, koneksi putus
 
 
 # --------------------------------------------------------------------------- #
@@ -63,7 +73,9 @@ def hitung_cooldown(e: Exception) -> int:
 class Provider:
     name = "base"
 
-    def generate(self, system: str, history: list[dict], prompt: str, timeout: float) -> str:
+    def generate(
+        self, system: str, history: list[dict], prompt: str, timeout: float
+    ) -> str:
         raise NotImplementedError
 
 
@@ -73,36 +85,67 @@ class GeminiProvider(Provider):
         self.name = f"gemini:{model}"
         self.api_key = api_key
 
-    def generate(self, system, history, prompt, timeout):
+    def generate(
+        self, system: str, history: list[dict], prompt: str, timeout: float
+    ) -> str:
         import google.generativeai as genai
 
         genai.configure(api_key=self.api_key)
         m = genai.GenerativeModel(self.model, system_instruction=system)
-        chat = m.start_chat(history=[{"role": h["role"], "parts": [h["content"]]} for h in history])
+        chat = m.start_chat(
+            history=[{"role": h["role"], "parts": [h["content"]]} for h in history]
+        )
         return chat.send_message(prompt, request_options={"timeout": timeout}).text
 
 
 class OpenAICompatProvider(Provider):
     """Untuk semua layanan berformat OpenAI: OpenRouter, Groq, Ollama, dll."""
 
-    def __init__(self, name, base_url, api_key, model, extra_models=None):
+    def __init__(
+        self,
+        name: str,
+        base_url: str,
+        api_key: str,
+        model: str,
+        extra_models: list[str] | None = None,
+    ):
         self.name = f"{name}:{model}"
         self.model = model
         self.extra_models = extra_models or []
         self.base_url, self.api_key = base_url, api_key
 
-    def generate(self, system, history, prompt, timeout):
+    def generate(
+        self, system: str, history: list[dict], prompt: str, timeout: float
+    ) -> str:
         from openai import OpenAI
+        from openai.types.chat import ChatCompletionMessageParam
 
-        client = OpenAI(base_url=self.base_url, api_key=self.api_key, max_retries=0)  # failover diurus router
+        client = OpenAI(
+            base_url=self.base_url, api_key=self.api_key, max_retries=0
+        )  # failover diurus router
         pesan = [{"role": "system", "content": system}]
         for h in history:
-            pesan.append({"role": "assistant" if h["role"] in ("model", "assistant") else "user",
-                          "content": h["content"]})
+            pesan.append(
+                {
+                    "role": (
+                        "assistant" if h["role"] in ("model", "assistant") else "user"
+                    ),
+                    "content": h["content"],
+                }
+            )
         pesan.append({"role": "user", "content": prompt})
 
-        kwargs = {"extra_body": {"models": [self.model] + self.extra_models}} if self.extra_models else {}
-        r = client.chat.completions.create(model=self.model, messages=pesan, timeout=timeout, **kwargs)
+        extra_body = (
+            {"models": [self.model] + self.extra_models}
+            if self.extra_models
+            else None
+        )
+        r = client.chat.completions.create(
+            model=self.model,
+            messages=cast(list[ChatCompletionMessageParam], pesan),
+            timeout=timeout,
+            extra_body=extra_body,
+        )
         return r.choices[0].message.content or ""
 
 
@@ -115,7 +158,9 @@ class LLMRouter:
         self.timeout = timeout
         self.cooldown_until: dict[str, float] = {}
 
-    def generate(self, system: str, history: list[dict], prompt: str) -> tuple[str, str]:
+    def generate(
+        self, system: str, history: list[dict], prompt: str
+    ) -> tuple[str, str]:
         """Return (balasan, nama_provider). Raise AllProvidersFailed bila semua gagal."""
         galat = []
         for p in self.providers:
@@ -128,49 +173,106 @@ class LLMRouter:
                 if not (teks or "").strip():
                     raise RuntimeError("balasan kosong")
                 if galat:
-                    logger.warning("Pindah provider -> %s (sebelumnya: %s)", p.name, "; ".join(galat))
+                    logger.warning(
+                        "Pindah provider -> %s (sebelumnya: %s)",
+                        p.name,
+                        "; ".join(galat),
+                    )
                 return teks, p.name
             except Exception as e:
                 detik = hitung_cooldown(e)
                 self.cooldown_until[p.name] = time.time() + detik
                 galat.append(f"{p.name}: {type(e).__name__}")
-                logger.warning("Provider %s gagal (%s), cooldown %ss: %.200s", p.name, type(e).__name__, detik, e)
-        raise AllProvidersFailed("; ".join(galat) or "tidak ada provider terkonfigurasi")
+                logger.warning(
+                    "Provider %s gagal (%s), cooldown %ss: %.200s",
+                    p.name,
+                    type(e).__name__,
+                    detik,
+                    e,
+                )
+        raise AllProvidersFailed(
+            "; ".join(galat) or "tidak ada provider terkonfigurasi"
+        )
 
     def status(self) -> list[dict]:
         sekarang = time.time()
-        return [{"provider": p.name,
-                 "cooldown_detik": max(0, int(self.cooldown_until.get(p.name, 0) - sekarang))}
-                for p in self.providers]
+        return [
+            {
+                "provider": p.name,
+                "cooldown_detik": max(
+                    0, int(self.cooldown_until.get(p.name, 0) - sekarang)
+                ),
+            }
+            for p in self.providers
+        ]
 
 
 def build_router() -> LLMRouter:
-    urutan = [x.strip().lower() for x in os.getenv("LLM_PROVIDERS", "gemini").split(",") if x.strip()]
+    urutan = [
+        x.strip().lower()
+        for x in os.getenv("LLM_PROVIDERS", "9router").split(",")
+        if x.strip()
+    ]
     providers: list[Provider] = []
 
     for nama in urutan:
         if nama == "gemini" and os.getenv("GEMINI_API_KEY"):
             for model in os.getenv("GEMINI_MODEL", "gemini-3.6-flash").split(","):
                 if model.strip():
-                    providers.append(GeminiProvider(model.strip(), os.environ["GEMINI_API_KEY"]))
-        elif nama in ("openrouter", "groq", "ollama"):
+                    providers.append(
+                        GeminiProvider(model.strip(), os.environ["GEMINI_API_KEY"])
+                    )
+        elif nama in ("9router", "openrouter", "groq", "ollama"):
             cfg = {
-                "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "OPENROUTER_MODEL"),
-                "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "GROQ_MODEL"),
-                "ollama": (os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/v1"), None, "OLLAMA_MODEL"),
+                "9router": (
+                    os.getenv(
+                        "NINEROUTER_BASE_URL",
+                        "http://host.docker.internal:20128/v1",
+                    ),
+                    "NINEROUTER_API_KEY",
+                    "NINEROUTER_MODEL",
+                ),
+                "openrouter": (
+                    "https://openrouter.ai/api/v1",
+                    "OPENROUTER_API_KEY",
+                    "OPENROUTER_MODEL",
+                ),
+                "groq": (
+                    "https://api.groq.com/openai/v1",
+                    "GROQ_API_KEY",
+                    "GROQ_MODEL",
+                ),
+                "ollama": (
+                    os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/v1"),
+                    None,
+                    "OLLAMA_MODEL",
+                ),
             }[nama]
             key = os.getenv(cfg[1], "ollama") if cfg[1] else "ollama"
             model = os.getenv(cfg[2], "").strip()
             if not (key and model):
-                logger.warning("Provider %s dilewati: API key atau %s belum diisi", nama, cfg[2])
+                logger.warning(
+                    "Provider %s dilewati: API key atau %s belum diisi", nama, cfg[2]
+                )
                 continue
-            extra = [m.strip() for m in os.getenv("OPENROUTER_FALLBACK_MODELS", "").split(",") if m.strip()] \
-                if nama == "openrouter" else []
+            extra = (
+                [
+                    m.strip()
+                    for m in os.getenv("OPENROUTER_FALLBACK_MODELS", "").split(",")
+                    if m.strip()
+                ]
+                if nama == "openrouter"
+                else []
+            )
             providers.append(OpenAICompatProvider(nama, cfg[0], key, model, extra))
         else:
-            logger.warning("Provider %r dilewati (tidak dikenal atau API key kosong)", nama)
+            logger.warning(
+                "Provider %r dilewati (tidak dikenal atau API key kosong)", nama
+            )
 
     if not providers:
-        logger.error("Tidak ada provider LLM yang aktif. Periksa LLM_PROVIDERS dan API key di .env")
+        logger.error(
+            "Tidak ada provider LLM yang aktif. Periksa LLM_PROVIDERS dan API key di .env"
+        )
     logger.info("Urutan provider LLM: %s", [p.name for p in providers])
     return LLMRouter(providers)
